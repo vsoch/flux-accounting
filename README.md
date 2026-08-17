@@ -17,7 +17,7 @@ priority plugin.
 ### Install Instructions
 
 For instructions for using a VSCode Development Container, see [this document in flux-core](https://github.com/flux-framework/flux-core/blob/master/vscode.md). You'll want to create the environment
-and proceed with the steps below to build.
+and proceed with the steps below to build. We have provided two environments - one `default` and one for use with `claude` code. Nothing is bound from the host, and you will need to export `ANTHROPIC_API_KEY`.
 
 ##### Building From Source
 

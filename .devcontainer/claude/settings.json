@@ -1,0 +1,26 @@
+{
+  "env": {
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLAUDE_CODE_ATTRIBUTION_HEADER": "0",
+    "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "NO-CUI-LC-claude-opus-5",
+    "ANTHROPIC_SMALL_FAST_MODEL": "NO-CUI-LC-claude-haiku-4-5",
+    "ANTHROPIC_BASE_URL": "https://livai-api.llnl.gov",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "NO-CUI-LC-claude-haiku-4-5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "NO-CUI-LC-claude-sonnet-5",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "NO-CUI-LC-claude-opus-5"
+  },
+  "permissions": {
+    "deny": [
+      "Read(~/.claude/**)",
+      "Edit(~/.claude/**)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)"
+    ]
+  },
+  "model": "NO-CUI-LC-claude-fable-5",
+  "effortLevel": "high",
+  "theme": "dark"
+}
