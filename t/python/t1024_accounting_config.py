@@ -41,6 +41,7 @@ class TestAccountingConfig(unittest.TestCase):
             conf["priority"]["factors"],
             {"fairshare": 100000, "queue": 10000, "bank": 0, "urgency": 1000},
         )
+        self.assertEqual(conf["quotas"]["user"], {})
 
     # keys from a TOML file override defaults; missing keys keep defaults
     def test_02_load_config_file(self):
@@ -190,6 +191,32 @@ class TestAccountingConfig(unittest.TestCase):
         os.remove(dbname)
         os.remove(filename)
         self.assertEqual(float(config_table["priority_decay_half_life"]), 86400.0)
+
+    # quotas accept arbitrary resource names and zero is a valid limit
+    def test_17_user_resource_quotas(self):
+        filename = write_toml(
+            "[accounting.quotas.user]\n" "core = 0\n" "quantum = 2\n"
+        )
+        conf = AccountingConfig(filename)
+        os.remove(filename)
+        self.assertEqual(conf["quotas"]["user"], {"core": 0, "quantum": 2})
+
+    # quota values must be non-negative integers that fit resource counts
+    def test_18_invalid_user_resource_quotas(self):
+        for value in ("true", '"two"', "1.5", "-1", "2147483648"):
+            filename = write_toml(
+                f"[accounting.quotas.user]\nquantum = {value}\n"
+            )
+            with self.assertRaises(ValueError):
+                AccountingConfig(filename)
+            os.remove(filename)
+
+    # only per-user quotas are supported in this increment
+    def test_19_unknown_quota_scope(self):
+        filename = write_toml("[accounting.quotas.total]\nquantum = 8\n")
+        with self.assertRaises(ValueError):
+            AccountingConfig(filename)
+        os.remove(filename)
 
 
 def suite():

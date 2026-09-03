@@ -36,7 +36,26 @@ test_expect_success 'plugin can be loaded again after being unloaded' '
 test_expect_success 'tracked usage is empty with no running jobs' '
 	flux jobtap query resource_quotas.so > query.json &&
 	test_debug "jq -S . <query.json" &&
-	jq -e ".user_resources == {}" <query.json
+	jq -e ".user_resources == {}" <query.json &&
+	jq -e ".user_quotas == {}" <query.json
+'
+
+test_expect_success 'load per-user quotas from broker configuration' '
+	flux jobtap remove resource_quotas.so &&
+	flux config load <<-EOF &&
+	[accounting.quotas.user]
+	core = 0
+	quantum = 2
+	EOF
+	flux jobtap load ${RESOURCE_QUOTAS} &&
+	flux jobtap query resource_quotas.so > query.json &&
+	test_debug "jq -S . <query.json" &&
+	jq -e ".user_quotas == {\"core\": 0, \"quantum\": 2}" <query.json
+'
+
+test_expect_success 'configured quotas are not enforced yet' '
+	job0=$(flux submit -n1 true) &&
+	flux job wait-event -t 30 ${job0} clean
 '
 
 test_expect_success 'a running job shows up in tracked usage' '
@@ -98,6 +117,31 @@ test_expect_success 'a job canceled before it runs is never counted' '
 	flux jobtap query resource_quotas.so > query.json &&
 	test_debug "jq -S . <query.json" &&
 	jq -e ".user_resources == {}" <query.json
+'
+
+test_expect_success 'plugin rejects a non-integer user quota' '
+	flux jobtap remove resource_quotas.so &&
+	flux config load <<-EOF &&
+	[accounting.quotas.user]
+	quantum = "two"
+	EOF
+	test_must_fail flux jobtap load ${RESOURCE_QUOTAS}
+'
+
+test_expect_success 'plugin rejects an out-of-range user quota' '
+	flux config load <<-EOF &&
+	[accounting.quotas.user]
+	quantum = -1
+	EOF
+	test_must_fail flux jobtap load ${RESOURCE_QUOTAS}
+'
+
+test_expect_success 'plugin rejects an unsupported quota scope' '
+	flux config load <<-EOF &&
+	[accounting.quotas.total]
+	quantum = 8
+	EOF
+	test_must_fail flux jobtap load ${RESOURCE_QUOTAS}
 '
 
 test_done

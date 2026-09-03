@@ -48,6 +48,9 @@ test_expect_success 'create a config file that customizes some defaults' '
 
 	[accounting.queues]
 	deny-unknown = true
+
+	[accounting.quotas.user]
+	quantum = 2
 	EOF
 '
 
