@@ -59,6 +59,9 @@ def default_config():
         "queues": {
             "deny-unknown": False,
         },
+        "quotas": {
+            "user": {},
+        },
     }
 
 
@@ -128,6 +131,9 @@ class AccountingConfig(Mapping):
                     raise ValueError(
                         f"{path}: [accounting.{section}.{key}] must be a table"
                     )
+                if section == "quotas" and key == "user":
+                    defaults[key].update(value)
+                    continue
                 for subkey, subvalue in value.items():
                     if subkey not in defaults[key]:
                         raise ValueError(
@@ -160,6 +166,14 @@ class AccountingConfig(Mapping):
                 raise ValueError(f"priority.factors.{factor} must be an integer")
         if not isinstance(self._conf["queues"]["deny-unknown"], bool):
             raise ValueError("queues.deny-unknown must be a boolean")
+        for resource, quota in self._conf["quotas"]["user"].items():
+            if isinstance(quota, bool) or not isinstance(quota, int):
+                raise ValueError(f"quotas.user.{resource} must be an integer")
+            if quota < 0 or quota > fluxacct.accounting.INTEGER_MAX:
+                raise ValueError(
+                    f"quotas.user.{resource} must be between 0 and "
+                    f"{fluxacct.accounting.INTEGER_MAX}"
+                )
 
     def to_dict(self):
         """Return a deep copy of the configuration as a plain dictionary."""

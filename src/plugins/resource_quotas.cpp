@@ -25,6 +25,7 @@ extern "C" {
 #include <jansson.h>
 }
 
+#include <climits>
 #include <map>
 #include <string>
 
@@ -33,6 +34,95 @@ extern "C" {
 // the total amount of each resource type in use by the running jobs of
 // each user, keyed by userid and then by resource type name
 std::map<int, std::map<std::string, int>> user_resources;
+// configured concurrent resource limits applied to each user across banks
+std::map<std::string, int> user_quotas;
+
+/*
+ * Load per-user quotas from the broker's [accounting.quotas.user]
+ * configuration. Resource names are unrestricted, but quota values must fit
+ * the integer resource counts used by the jobspec reader.
+ */
+static int load_user_quotas (flux_plugin_t *p)
+{
+    flux_t *h = flux_jobtap_get_flux (p);
+    const flux_conf_t *conf = flux_get_conf (h);
+    flux_error_t conf_error;
+    json_error_t json_error;
+    json_t *accounting = NULL;
+    json_t *quotas = NULL;
+    json_t *user = NULL;
+    const char *name;
+    json_t *value;
+
+    if (flux_conf_unpack (conf,
+                          &conf_error,
+                          "{s?o}",
+                          "accounting", &accounting) < 0) {
+        flux_log (h,
+                  LOG_ERR,
+                  "resource_quotas: failed to read configuration: %s",
+                  conf_error.text);
+        return -1;
+    }
+    if (!accounting)
+        return 0;
+    if (json_unpack_ex (accounting,
+                        &json_error,
+                        0,
+                        "{s?o}",
+                        "quotas", &quotas) < 0) {
+        flux_log (h,
+                  LOG_ERR,
+                  "resource_quotas: invalid [accounting] configuration: %s",
+                  json_error.text);
+        return -1;
+    }
+    if (!quotas)
+        return 0;
+    if (json_unpack_ex (quotas,
+                        &json_error,
+                        JSON_STRICT,
+                        "{s?o}",
+                        "user", &user) < 0) {
+        flux_log (h,
+                  LOG_ERR,
+                  "resource_quotas: invalid [accounting.quotas] configuration: %s",
+                  json_error.text);
+        return -1;
+    }
+    if (!user)
+        return 0;
+    if (!json_is_object (user)) {
+        flux_log (h,
+                  LOG_ERR,
+                  "resource_quotas: [accounting.quotas.user] must be a table");
+        return -1;
+    }
+    json_object_foreach (user, name, value) {
+        json_int_t quota;
+
+        if (!json_is_integer (value)) {
+            flux_log (h,
+                      LOG_ERR,
+                      "resource_quotas: accounting.quotas.user.%s must be an "
+                      "integer",
+                      name);
+            return -1;
+        }
+        quota = json_integer_value (value);
+        if (quota < 0 || quota > INT_MAX) {
+            flux_log (h,
+                      LOG_ERR,
+                      "resource_quotas: accounting.quotas.user.%s must be between "
+                      "0 and %d",
+                      name,
+                      INT_MAX);
+            return -1;
+        }
+        user_quotas[name] = static_cast<int> (quota);
+    }
+    return 0;
+}
 
 /*
  * Unpack the userid and jobspec for the current job and count the total
@@ -202,6 +292,24 @@ error:
     return NULL;
 }
 
+// build a JSON object of the configured per-user resource quotas
+static json_t *user_quotas_to_json ()
+{
+    json_t *o = json_object ();
+
+    if (!o)
+        return NULL;
+    for (const auto &entry : user_quotas) {
+        if (json_object_set_new (o,
+                                 entry.first.c_str (),
+                                 json_integer (entry.second)) < 0) {
+            json_decref (o);
+            return NULL;
+        }
+    }
+    return o;
+}
+
 /*
  * Report the tracked per-user resource usage so it can be inspected with
  * flux jobtap query.
@@ -212,20 +320,29 @@ static int query_cb (flux_plugin_t *p,
                      void *data)
 {
     json_t *usage = user_resources_to_json ();
+    json_t *quotas = user_quotas_to_json ();
 
-    if (!usage)
+    if (!usage || !quotas) {
+        if (usage)
+            json_decref (usage);
+        if (quotas)
+            json_decref (quotas);
         return -1;
+    }
 
     if (flux_plugin_arg_pack (args,
-                              FLUX_PLUGIN_ARG_OUT,
-                              "{s:O}",
-                              "user_resources",
-                              usage) < 0)
+                               FLUX_PLUGIN_ARG_OUT,
+                               "{s:O s:O}",
+                               "user_resources",
+                               usage,
+                               "user_quotas",
+                               quotas) < 0)
         flux_log_error (flux_jobtap_get_flux (p),
                         "resource_quotas: query_cb: flux_plugin_arg_pack: %s",
                         flux_plugin_arg_strerror (args));
 
     json_decref (usage);
+    json_decref (quotas);
 
     return 0;
 }
@@ -243,6 +360,10 @@ extern "C" int flux_plugin_init (flux_plugin_t *p)
     // explicitly reset all tracked state so a reload starts clean and is
     // rebuilt from the active jobs replayed by the job manager
     user_resources.clear ();
+    user_quotas.clear ();
+
+    if (load_user_quotas (p) < 0)
+        return -1;
 
     if (flux_plugin_register (p, "resource_quotas", tab) < 0)
         return -1;
