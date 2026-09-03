@@ -1,9 +1,10 @@
 # Example flux-accounting configuration file.
 #
-# Every key is optional; the values below are the built-in defaults used
-# by "flux account create-db" when no configuration file is provided.
-# Pass a customized copy of this file to "flux account create-db" with
-# --config-path=/path/to/accounting.toml.
+# Every key is optional. Usage, priority, and queue values are defaults used
+# by "flux account create-db". Resource quotas are read at runtime by the
+# resource quotas jobtap plugin when this file is loaded by the broker.
+# A customized file may therefore be both installed in the broker config path
+# and passed to "flux account create-db" with --config-path.
 #
 # Durations may be expressed in Flux Standard Duration (e.g. "7d") or as
 # a number of seconds.
@@ -36,3 +37,7 @@
 [accounting.queues]
 # reject jobs submitted to queues not defined in the queue_table
 #deny-unknown = false
+
+# concurrent resource quotas applied to each user across all banks
+[accounting.quotas.user]
+#quantum = 2

@@ -607,17 +607,26 @@ multi-factor priority plugin enforces what the flux-accounting database
 defines. Those are per-association values managed with ``flux account``
 commands, such as multi-factor job priority, fair-share, per-association
 resource and job limits, and bank and queue permissions. The resource quotas
-plugin enforces what the TOML configuration defines. Those are site-wide
+plugin owns policy defined in the TOML configuration. Those are site-wide
 concurrent resource quotas that apply uniformly, per user across banks and
 eventually instance-wide, for any resource type including custom ones. The
-plugins are independent and either or both can be loaded. A job must satisfy
-every policy from every loaded plugin.
+plugins are independent and either or both can be loaded.
 
 The resource quotas plugin currently tracks per-user resource usage for every
 resource type found in the jobspec of every running job. Usage is added when
 a job starts running and removed when it becomes inactive. Jobs that are
 already running when the plugin is loaded are also counted, so the tracked
-state survives a plugin reload.
+state survives a plugin reload. It also reads configured per-user quotas from
+the broker configuration. Quota enforcement is not implemented yet.
+
+Per-user quotas are configured by resource type and apply to each user across
+all banks. A missing resource type has no quota. Changes take effect when the
+plugin is reloaded.
+
+.. code-block:: toml
+
+ [accounting.quotas.user]
+ quantum = 2
 
 The plugin can be loaded with ``flux jobtap load`` and requires no
 flux-accounting database or service to run:
@@ -627,17 +636,22 @@ flux-accounting database or service to run:
  $ flux jobtap load resource_quotas.so
 
 The tracked usage can be inspected at any time with ``flux jobtap query``,
-which reports the total amount of each resource type in use by each user's
-running jobs, keyed by user ID:
+which reports the configured quotas and the total amount of each resource type
+in use by each user's running jobs, keyed by user ID:
 
 .. code-block:: console
 
- $ flux jobtap query resource_quotas.so | jq .user_resources
+ $ flux jobtap query resource_quotas.so | jq
  {
-   "58985": {
-     "core": 3,
-     "node": 2,
-     "slot": 3
+   "user_quotas": {
+     "quantum": 2
+   },
+   "user_resources": {
+     "58985": {
+       "core": 3,
+       "node": 2,
+       "slot": 3
+     }
    }
  }
 
